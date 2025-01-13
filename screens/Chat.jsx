@@ -1,61 +1,69 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
+  ActivityIndicator,
+  BackHandler,
+  KeyboardAvoidingView,
   Platform,
+  SectionList,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  ActivityIndicator,
-  FlatList,
-  StatusBar,
-  ScrollView,
-  BackHandler,
-  KeyboardAvoidingView,
 } from 'react-native';
+import DocumentPicker from 'react-native-document-picker';
+import {launchImageLibrary as _launchImageLibrary} from 'react-native-image-picker';
 import {Avatar} from 'react-native-paper';
-import {SafeAreaView} from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
-import {useDispatch, useSelector} from 'react-redux';
 import {
   Menu,
-  MenuOptions,
   MenuOption,
+  MenuOptions,
   MenuTrigger,
 } from 'react-native-popup-menu';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
+import Icon from 'react-native-vector-icons/Ionicons';
+import {useDispatch, useSelector} from 'react-redux';
+import DeleteChatMenu from '../components/dialog/DeleteChatMenu';
 import MessageComponent from '../components/shared/MessageComponent';
+import TypingBubble from '../components/shared/TypingBubble';
+import {
+  ALERT,
+  CHAT_JOINED,
+  CHAT_LEAVE,
+  NEW_MESSAGE,
+  START_TYPING,
+  STOP_TYPING,
+} from '../constants/events';
+import {useErrors, useSocketEvents} from '../hooks/hooks';
+import {transformImage} from '../lib/features';
+import {useTheme} from '../lib/themeContext'; // Import useTheme hook
 import {
   useChatDetailsQuery,
   useGetMessagesQuery,
   useMyChatsQuery,
   useSendAttachmentsMutation,
 } from '../redux/api/api';
-import {getSocket} from '../socket';
-import {useErrors, useSocketEvents} from '../hooks/hooks';
-import {
-  ALERT,
-  CHAT_JOINED,
-  CHAT_LEAVE,
-  NEW_MESSAGE,
-  REFETCH_CHATS,
-  START_TYPING,
-  STOP_TYPING,
-} from '../constants/events';
 import {removeNewMessagesAlert} from '../redux/reducers/chat';
-import DeleteChatMenu from '../components/dialog/DeleteChatMenu';
 import {setIsDeleteMenu, setUploadingLoader} from '../redux/reducers/misc';
-import DocumentPicker from 'react-native-document-picker';
-import {launchImageLibrary as _launchImageLibrary} from 'react-native-image-picker';
-import Toast from 'react-native-toast-message';
-import {useTheme} from '../lib/themeContext'; // Import useTheme hook
-import {
-  sampleChats,
-  sampleMesaage,
-  sampleMessage,
-} from '../constants/sampleData';
-import { transformImage } from '../lib/features';
-import TypingBubble from '../components/shared/TypingBubble';
+import {getSocket} from '../socket';
 let launchImageLibrary = _launchImageLibrary;
+
+const groupMessagesByDate = messages => {
+  const groupedMessages = messages.reduce((groups, message) => {
+    const date = new Date(message.createdAt).toDateString();
+    if (!groups[date]) {
+      groups[date] = [];
+    }
+    groups[date].push(message);
+    return groups;
+  }, {});
+
+  return Object.keys(groupedMessages).map(date => ({
+    title: date,
+    data: groupedMessages[date],
+  }));
+};
 
 const Chat = ({navigation, route}) => {
   const {user} = useSelector(state => state.auth);
@@ -76,9 +84,8 @@ const Chat = ({navigation, route}) => {
   const [hasMore, setHasMore] = useState(true);
   const dispatch = useDispatch();
   const [fileResponse, setFileResponse] = useState([]);
-  const {theme} = useTheme(); // Access the theme
-  const [inputHeight, setInputHeight] = useState(40); 
-
+  const {theme} = useTheme();
+  const [inputHeight, setInputHeight] = useState(40);
 
   const chatId = route.params.chatId;
 
@@ -90,7 +97,7 @@ const Chat = ({navigation, route}) => {
   const isGroup = chatDetails?.data?.chat?.groupChat;
 
   const {refetch} = useMyChatsQuery('');
-  const oldMessagesChunk = useGetMessagesQuery({ chatId, page });
+  const oldMessagesChunk = useGetMessagesQuery({chatId, page});
 
   const errors = [
     {isError: chatDetails.isError, error: chatDetails.error},
@@ -101,22 +108,21 @@ const Chat = ({navigation, route}) => {
 
   const [sendAttachments] = useSendAttachmentsMutation();
 
-  const fetchMessages = async (page) => {
+  const fetchMessages = async page => {
     if (!hasMore || isLoading) return;
-  
+
     setIsLoading(true);
     try {
-      const res = await oldMessagesChunk.refetch({ chatId, page }); // Ensure `page` is passed correctly
-  
+      const res = await oldMessagesChunk.refetch({chatId, page});
+
       const newMessages = res?.data?.messages || [];
-  
+
       if (newMessages.length > 0) {
-        // Sort the messages by date if needed
         const sortedMessages = [...newMessages].sort(
-          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+          (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
         );
-  
-        setOldMessages((prev) => [...prev, ...sortedMessages]);
+
+        setOldMessages(prev => [...prev, ...sortedMessages]);
       } else {
         setHasMore(false);
       }
@@ -126,26 +132,12 @@ const Chat = ({navigation, route}) => {
       setIsLoading(false);
     }
   };
-  
 
   const loadMoreMessages = () => {
     if (!isLoading && hasMore) {
-      setPage((prevPage) => prevPage + 1);
+      setPage(prevPage => prevPage + 1);
     }
   };
-
-  useEffect(() => {
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      () => {
-        navigateBack()
-        return true;
-      }
-    );
-  
-    return () => backHandler.remove(); 
-  }, []);
-  
 
   useEffect(() => {
     fetchMessages(page);
@@ -182,7 +174,6 @@ const Chat = ({navigation, route}) => {
     refetch();
   }, []);
 
-
   const startTypingListener = useCallback(
     data => {
       if (data.chatId !== chatId) return;
@@ -202,14 +193,7 @@ const Chat = ({navigation, route}) => {
   );
 
   const navigateBack = () => {
-    setMessages([]);
-    setMessage('');
-    setOldMessages([]);
-    setPage(1);
-    setTimeout(() => {
-      navigation.goBack();
-      dispatch(removeNewMessagesAlert(chatId));
-    }, 200);
+    navigation.goBack();
   };
 
   const alertListener = useCallback(
@@ -251,8 +235,8 @@ const Chat = ({navigation, route}) => {
     }
   }, [chatInfo, user]);
 
-  const handleContentSizeChange = (event) => {
-    setInputHeight(event.nativeEvent.contentSize.height); 
+  const handleContentSizeChange = event => {
+    setInputHeight(event.nativeEvent.contentSize.height);
   };
 
   const navigateProfileHandler = () => {
@@ -260,20 +244,20 @@ const Chat = ({navigation, route}) => {
   };
 
   useEffect(() => {
-    if(members){
+    if (members) {
       socket.emit(CHAT_JOINED, {userId: user._id, members});
     }
     dispatch(removeNewMessagesAlert(chatId));
 
     return () => {
-    setMessages([]);
-    setMessage('');
-    setOldMessages([]);
-    setPage(1);
-    setTimeout(() => {
-      dispatch(removeNewMessagesAlert(chatId));
-      socket.emit(CHAT_LEAVE, {userId: user._id, members});
-    }, 2);
+      setMessages([]);
+      setMessage('');
+      setOldMessages([]);
+      setPage(1);
+      setTimeout(() => {
+        dispatch(removeNewMessagesAlert(chatId));
+        socket.emit(CHAT_LEAVE, {userId: user._id, members});
+      }, 2);
     };
   }, [chatId, CHAT_LEAVE, CHAT_JOINED]);
 
@@ -317,7 +301,6 @@ const Chat = ({navigation, route}) => {
           type: fileType,
         });
       }
-      
     });
 
     try {
@@ -366,180 +349,196 @@ const Chat = ({navigation, route}) => {
     }
   };
 
-  console.log(messages)
-
   const allMessages = [...messages, ...oldMessages];
-
+  const sections = groupMessagesByDate(allMessages);
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'margin'} 
-      keyboardVerticalOffset={Platform.OS === 'ios' ? -20 : 0}  
-    >
-    <View style={[styles.container, {backgroundColor: theme.background}]}>
-      <SafeAreaView style={[styles.container, {backgroundColor: theme.background}]}>
-        <View style={styles.appBar}>
-          {chatDetails.isLoading ? (
-          <ActivityIndicator size="large" color="#6d28d9" />
-        ) : (
-            <View style={styles.appBarContent}>
-              <TouchableOpacity onPress={navigateBack}>
-                <Icon
-                  name="chevron-back-outline"
-                  size={25}
-                  color={theme.icon}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'margin'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? -20 : 0}>
+      <View style={[styles.container, {backgroundColor: theme.background}]}>
+        <SafeAreaView
+          style={[styles.container, {backgroundColor: theme.background}]}>
+          <View style={styles.appBar}>
+            {chatDetails.isLoading ? (
+              <ActivityIndicator size="large" color="#6d28d9" />
+            ) : (
+              <View style={styles.appBarContent}>
+                <TouchableOpacity onPress={navigateBack}>
+                  <Icon
+                    name="chevron-back-outline"
+                    size={25}
+                    color={theme.icon}
+                  />
+                </TouchableOpacity>
+                <Avatar.Image
+                  size={40}
+                  source={
+                    otherUser?.avatar?.url
+                      ? {uri: transformImage(otherUser.avatar.url, 50)}
+                      : require('../images/default.png') 
+                  }
                 />
-              </TouchableOpacity>
-              <Avatar.Image
-                size={40}
-                source={{
-                  uri: transformImage(otherUser?.avatar?.url, 50)
-                }}
-              />
-              <Text style={{fontSize: 16, color: theme.text}}>
-                {otherUser?.name}
-              </Text>
-            </View>
-          )}
-
-          <Menu>
-            <MenuTrigger
-              customStyles={{TriggerTouchableComponent: TouchableOpacity}}>
-              <View>
-                <Icon name="ellipsis-vertical" size={22} color={theme.icon} />
+                <Text style={{fontSize: 16, color: theme.text}}>
+                  {otherUser?.name}
+                </Text>
               </View>
-            </MenuTrigger>
-            <MenuOptions
-              customStyles={{
-                  optionsContainer: [styles.appBarMenuContainer, {backgroundColor: theme.menubg}],
+            )}
+
+            <Menu>
+              <MenuTrigger
+                customStyles={{TriggerTouchableComponent: TouchableOpacity}}>
+                <View>
+                  <Icon name="ellipsis-vertical" size={22} color={theme.icon} />
+                </View>
+              </MenuTrigger>
+              <MenuOptions
+                customStyles={{
+                  optionsContainer: [
+                    styles.appBarMenuContainer,
+                    {backgroundColor: theme.menubg},
+                  ],
                 }}>
-              <MenuOption
-                style={styles.menuOpt}
-                onSelect={navigateProfileHandler}>
-                <Icon name="person" size={18} color={theme.menuIcon} />
-                <Text style={{ color: theme.text }} >Profile</Text>
-              </MenuOption>
-              <View style={styles.separator} />
+                <MenuOption
+                  style={styles.menuOpt}
+                  onSelect={navigateProfileHandler}>
+                  <Icon name="person" size={18} color={theme.menuIcon} />
+                  <Text style={{color: theme.text}}>Profile</Text>
+                </MenuOption>
+                <View style={styles.separator} />
 
-              <MenuOption
-                style={styles.menuOpt}
-                onSelect={() => dispatch(setIsDeleteMenu(true))}>
-                {isGroup ? (
-                  <>
-                    <Icon
-                      name="log-out-outline"
-                      size={18}
-                      color="rgba(255,0,0,0.8)"
-                    />
-                    <Text style={{color: 'rgba(255,0,0,0.9)'}}>Leave</Text>
-                  </>
-                ) : (
-                  <>
-                    <Icon name="trash" size={18} color="rgba(255,0,0,0.8)" />
-                    <Text style={{color: 'rgba(255,0,0,0.9)'}}>Delete</Text>
-                  </>
-                )}
-              </MenuOption>
-            </MenuOptions>
-          </Menu>
-        </View>
+                <MenuOption
+                  style={styles.menuOpt}
+                  onSelect={() => dispatch(setIsDeleteMenu(true))}>
+                  {isGroup ? (
+                    <>
+                      <Icon
+                        name="log-out-outline"
+                        size={18}
+                        color="rgba(255,0,0,0.8)"
+                      />
+                      <Text style={{color: 'rgba(255,0,0,0.9)'}}>Leave</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="trash" size={18} color="rgba(255,0,0,0.8)" />
+                      <Text style={{color: 'rgba(255,0,0,0.9)'}}>Delete</Text>
+                    </>
+                  )}
+                </MenuOption>
+              </MenuOptions>
+            </Menu>
+          </View>
 
-        <FlatList
-          style={{
-            flex: 1,
-          }}
-          data={allMessages}
-          inverted
-          renderItem={({item, index}) => {
-            const nextMessage =
-              index < allMessages.length - 1 ? allMessages[index + 1] : null;
-            return (
-              <MessageComponent
-                key={item._id}
-                message={item}
-                user={user}
-                group={isGroup}
-                nextMessage={nextMessage}
-              />
-            );
-          }}
-          keyExtractor={item => item._id}
-          onEndReached={loadMoreMessages}
-          onEndReachedThreshold={0.1}
-          ListFooterComponent={
-            isLoading ? <ActivityIndicator size="large" /> : null
-          }
-        />
-        {userTyping && <TypingBubble user={senderTyping} group={isGroup} />}
-        <View style={styles.inputContainer}>
-        <Menu>
-  <MenuTrigger
-    customStyles={{ TriggerTouchableComponent: TouchableOpacity }}>
-    <View style={styles.menuTrigger}>
-      <Icon name="attach" size={30} color="white" />
-    </View>
-  </MenuTrigger>
-  <MenuOptions
-    customStyles={{
-      optionsContainer: [styles.menuContainer, { backgroundColor: theme.menubg }],
-    }}>
-    
-    <MenuOption
-      style={styles.menuOpt}
-      onSelect={() => handleFileSelection('image', 'photo')}>
-      <Icon name="image" size={22} color={theme.menuIcon} />  
-      <Text style={{ color: theme.text }}>Image</Text>         
-    </MenuOption>
-    <View style={styles.separator} />
-
-    <MenuOption
-      style={styles.menuOpt}
-      onSelect={() => handleFileSelection('video', 'video')}>
-      <Icon name="videocam" size={22} color={theme.menuIcon} />  
-      <Text style={{ color: theme.text }}>Video</Text>            
-    </MenuOption>
-    <View style={styles.separator} />
-
-    <MenuOption
-      style={styles.menuOpt}
-      onSelect={() => handleFileSelection('audio', 'audio')}>
-      <Icon name="headset" size={22} color={theme.menuIcon} />  
-      <Text style={{ color: theme.text }}>Audio</Text>           
-    </MenuOption>
-    <View style={styles.separator} />
-
-    <MenuOption
-      style={styles.menuOpt}
-      onSelect={() => handleFileSelection('file', 'allFiles')}>
-      <Icon name="document" size={22} color={theme.menuIcon} />  
-      <Text style={{ color: theme.text }}>Document</Text>        
-    </MenuOption>
-
-  </MenuOptions>
-</Menu>
-          <TextInput
-            placeholder="Type Something..."
-            placeholderTextColor={theme.placeHolder}
-            style={[styles.input, {backgroundColor: theme.srchbarbg, color: theme.text, borderColor: theme.border, height: Math.max(40, inputHeight)}]}
-            onChangeText={messageOnChange}
-            value={message}
-            multiline={true}
-            returnKeyType="default" 
-            blurOnSubmit={false}
-            onContentSizeChange={handleContentSizeChange}
-            scrollEnabled= {true}
+          <SectionList
+            sections={sections}
+            keyExtractor={item => item._id}
+            inverted
+            renderItem={({item, index, section}) => {
+              const nextMessage =
+                index < section.data.length - 1
+                  ? section.data[index + 1]
+                  : null;
+              return (
+                <MessageComponent
+                  key={item._id}
+                  message={item}
+                  user={user}
+                  group={isGroup}
+                  nextMessage={nextMessage}
+                />
+              );
+            }}
+            onEndReached={loadMoreMessages}
+            onEndReachedThreshold={0.1}
+            ListFooterComponent={
+              isLoading && <ActivityIndicator size="small" color={theme.text} />
+            }
           />
+          {userTyping && <TypingBubble user={senderTyping} group={isGroup} />}
+          <View style={styles.inputContainer}>
+            <Menu>
+              <MenuTrigger
+                customStyles={{TriggerTouchableComponent: TouchableOpacity}}>
+                <View style={styles.menuTrigger}>
+                  <Icon name="attach" size={30} color="white" />
+                </View>
+              </MenuTrigger>
+              <MenuOptions
+                customStyles={{
+                  optionsContainer: [
+                    styles.menuContainer,
+                    {backgroundColor: theme.menubg},
+                  ],
+                }}>
+                <MenuOption
+                  style={styles.menuOpt}
+                  onSelect={() => handleFileSelection('image', 'photo')}>
+                  <Icon name="image" size={22} color={theme.menuIcon} />
+                  <Text style={{color: theme.text}}>Image</Text>
+                </MenuOption>
+                <View style={styles.separator} />
 
-          <TouchableOpacity
-            style={styles.iconContainer}
-            onPress={submitHandler}>
-            <Icon name="send" size={20} color="white" style={styles.sendIcon} />
-          </TouchableOpacity>
-        </View>
-        <DeleteChatMenu chatId={chatId} isGroup={isGroup} />
-      </SafeAreaView>
-    </View>
+                <MenuOption
+                  style={styles.menuOpt}
+                  onSelect={() => handleFileSelection('video', 'video')}>
+                  <Icon name="videocam" size={22} color={theme.menuIcon} />
+                  <Text style={{color: theme.text}}>Video</Text>
+                </MenuOption>
+                <View style={styles.separator} />
+
+                <MenuOption
+                  style={styles.menuOpt}
+                  onSelect={() => handleFileSelection('audio', 'audio')}>
+                  <Icon name="headset" size={22} color={theme.menuIcon} />
+                  <Text style={{color: theme.text}}>Audio</Text>
+                </MenuOption>
+                <View style={styles.separator} />
+
+                <MenuOption
+                  style={styles.menuOpt}
+                  onSelect={() => handleFileSelection('file', 'allFiles')}>
+                  <Icon name="document" size={22} color={theme.menuIcon} />
+                  <Text style={{color: theme.text}}>Document</Text>
+                </MenuOption>
+              </MenuOptions>
+            </Menu>
+            <TextInput
+              placeholder="Type Something..."
+              placeholderTextColor={theme.placeHolder}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.srchbarbg,
+                  color: theme.text,
+                  borderColor: theme.border,
+                  height: Math.max(40, inputHeight),
+                },
+              ]}
+              onChangeText={messageOnChange}
+              value={message}
+              multiline={true}
+              returnKeyType="default"
+              blurOnSubmit={false}
+              onContentSizeChange={handleContentSizeChange}
+              scrollEnabled={true}
+            />
+
+            <TouchableOpacity
+              style={styles.iconContainer}
+              onPress={submitHandler}>
+              <Icon
+                name="send"
+                size={20}
+                color="white"
+                style={styles.sendIcon}
+              />
+            </TouchableOpacity>
+          </View>
+          <DeleteChatMenu chatId={chatId} isGroup={isGroup} />
+        </SafeAreaView>
+      </View>
     </KeyboardAvoidingView>
   );
 };
@@ -568,7 +567,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     justifyContent: 'space-between',
     marginVertical: 20,
-    marginBottom: Platform.OS === 'ios' && 0
+    marginBottom: Platform.OS === 'ios' && 0,
   },
   input: {
     flex: 1,
@@ -576,7 +575,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 10,
     marginHorizontal: 10,
-    paddingVertical: Platform.OS === 'ios' ? 11 : 0
+    paddingVertical: Platform.OS === 'ios' ? 11 : 0,
   },
   iconContainer: {
     backgroundColor: '#6d28d9',

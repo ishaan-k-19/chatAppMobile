@@ -21,6 +21,7 @@ const UserProfile = ({ navigation, route }) => {
 
   const { user } = useSelector((state) => state.auth);
   const { data, refetch } = useGetMessagesQuery({ chatId, page: 1 });
+  const [loading, setLoading] = useState(false);
 
   const mainUser = otherUser || user;
 
@@ -47,7 +48,6 @@ const UserProfile = ({ navigation, route }) => {
     setLoading(false);
   };
 
-  console.log(attachments)
 
   const [isImageViewVisible, setImageViewVisible] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -63,23 +63,8 @@ const UserProfile = ({ navigation, route }) => {
   };
 
   const navigationHandler = () => {
-    setAttachments([])
-    setTimeout(() => {
-      navigation.goBack();
-    }, 100);
+    navigation.goBack();
   };
-
-  useEffect(() => {
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      () => {
-        navigationHandler()
-        return true;
-      }
-    );
-  
-    return () => backHandler.remove(); 
-  }, []);
 
   useEffect(() => {
     if (data?.messages) {
@@ -252,6 +237,7 @@ const UserProfile = ({ navigation, route }) => {
           max= {6}
           maxcol={3}
           isList={true}
+          styling={{margin: 4}}
 
           />
           </View>

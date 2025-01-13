@@ -10,6 +10,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 
 
 const MessageComponent = ({ message, user, group, nextMessage }) => {
+  // console.log(message)
   const { sender, content, attachments = [], createdAt } = message;
   const [isImageViewVisible, setImageViewVisible] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -39,7 +40,7 @@ const MessageComponent = ({ message, user, group, nextMessage }) => {
           <TouchableOpacity>
             <Image
               style={styles.avatar}
-              source={{ uri: transformImage(sender?.avatar?.url, 50) }}
+              source={{ uri: sender?.avatar?.url ? transformImage(sender.avatar.url, 50) : 'https://fallback-url.com/default-avatar.png' }}
               />
           </TouchableOpacity>
         )}
@@ -140,7 +141,7 @@ const styles = StyleSheet.create({
   messageBubbleWithAttachment: {
     paddingVertical: 8,
     paddingHorizontal: 8,
-    maxWidth: '53%',
+    maxWidth: '73%',
   },
   leftBubble: {
     backgroundColor: '#f0f0f0', 

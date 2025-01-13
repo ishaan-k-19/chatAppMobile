@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Linking, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Linking, BackHandler, ScrollView } from 'react-native';
 import React, { useEffect, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -27,23 +27,8 @@ const Attachments = ({ navigation, route }) => {
   };
 
   const navigationHandler = () => {
-    setAttachments([])
-    setTimeout(() => {
-      navigation.goBack();
-    }, 100);
+    navigation.goBack();
   };
-
-  useEffect(() => {
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      () => {
-        navigationHandler()
-        return true;
-      }
-    );
-  
-    return () => backHandler.remove(); 
-  }, []);
   
   return (
     <View style={[styles.container, {backgroundColor: theme.background}]}>
@@ -55,7 +40,7 @@ const Attachments = ({ navigation, route }) => {
           <Text style={[styles.titleText, {color: theme.titleTxt}]}>Media</Text>
         </View>
 
-      <View style={styles.attachmentList}>
+      <ScrollView style={styles.attachmentList} contentContainerStyle={{paddingBottom: 80}}>
         {attachments.length > 0 ? (
           <AttachmentHandler
           attachments={attachments}  
@@ -64,6 +49,7 @@ const Attachments = ({ navigation, route }) => {
           max={attachments.length}
           maxcol={3}
           isList={true}
+          styling={{margin: 5}}
           />
         ) : (
           <View>
@@ -77,7 +63,7 @@ const Attachments = ({ navigation, route }) => {
             }}>No attachments found</Text>
           </View>
         )}
-      </View>
+      </ScrollView>
       <ImageViewing
         images={attachments.filter(att => fileFormat(att.url) === 'image').map(att => ({ uri: att.url }))}
         imageIndex={selectedImageIndex}
@@ -107,7 +93,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   attachmentList: {
-    paddingHorizontal: 15,
+    paddingHorizontal: 18,
 
   },
   noAttachmentsContainer: {

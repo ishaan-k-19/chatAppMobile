@@ -1,20 +1,34 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Image, TouchableOpacity, Text, StyleSheet, Modal, ActivityIndicator, FlatList } from 'react-native';
+import React, {useState, useRef, useEffect} from 'react';
+import {
+  View,
+  Image,
+  TouchableOpacity,
+  Text,
+  StyleSheet,
+  Modal,
+  ActivityIndicator,
+} from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Video from 'react-native-video';
-import { createThumbnail } from 'react-native-create-thumbnail';
-import { InteractionManager } from 'react-native';
-import { transformImage } from '../../lib/features';
+import {createThumbnail} from 'react-native-create-thumbnail';
+import {InteractionManager} from 'react-native';
+import {transformImage} from '../../lib/features';
 
-const AttachmentHandler = ({ attachments, handleImageClick, handleDocumentClick, max, maxcol, isList }) => {
-
-
+const AttachmentHandler = ({
+  attachments,
+  handleImageClick,
+  handleDocumentClick,
+  max = 4,
+  maxcol = 2,
+  isList,
+  styling,
+}) => {
   const videoRef = useRef(null);
   const [fullscreenVideo, setFullscreenVideo] = useState(null);
   const [videoThumbnails, setVideoThumbnails] = useState({});
   const [loadingThumbnails, setLoadingThumbnails] = useState({});
 
-  const fileFormat = (url) => {
+  const fileFormat = url => {
     const extension = url.split('.').pop().toLowerCase();
     if (['jpg', 'jpeg', 'png', 'gif'].includes(extension)) return 'image';
     if (['mp4', 'mov', 'avi'].includes(extension)) return 'video';
@@ -23,12 +37,8 @@ const AttachmentHandler = ({ attachments, handleImageClick, handleDocumentClick,
     return 'unknown';
   };
 
-  const isMultiple = attachments.length > 1;
-  const maxAttachments = max;
-  const extraCount = attachments.length - maxAttachments;
-
   const generateVideoThumbnail = async (url, index) => {
-    setLoadingThumbnails(prev => ({ ...prev, [index]: true }));
+    setLoadingThumbnails(prev => ({...prev, [index]: true}));
     try {
       const thumbnail = await createThumbnail({
         url,
@@ -41,7 +51,7 @@ const AttachmentHandler = ({ attachments, handleImageClick, handleDocumentClick,
     } catch (error) {
       console.error('Error generating video thumbnail', error);
     }
-    setLoadingThumbnails(prev => ({ ...prev, [index]: false }));
+    setLoadingThumbnails(prev => ({...prev, [index]: false}));
   };
 
   useEffect(() => {
@@ -56,7 +66,7 @@ const AttachmentHandler = ({ attachments, handleImageClick, handleDocumentClick,
     return () => task.cancel();
   }, [attachments]);
 
-  const handleVideoClick = (url) => {
+  const handleVideoClick = url => {
     setFullscreenVideo(url);
   };
 
@@ -67,28 +77,37 @@ const AttachmentHandler = ({ attachments, handleImageClick, handleDocumentClick,
     }
   };
 
-  const renderAttachmentItem = ({ item, index }) => {
+  const groupAttachments = (items, numColumns) => {
+    const grouped = [];
+    for (let i = 0; i < items.length; i += numColumns) {
+      grouped.push(items.slice(i, i + numColumns));
+    }
+    return grouped;
+  };
+
+  const renderAttachmentItem = (item, index, isLastVisible, moreThanOne) => {
     const url = item.url;
     const file = fileFormat(url);
-    const isLastVisible = index === maxAttachments - 1 && extraCount > 0;
 
     switch (file) {
       case 'image':
         return (
           <TouchableOpacity key={index} onPress={() => handleImageClick(index)}>
-            <View style={styles.imageWrapper}>
+            <View style={[styles.imageWrapper, styling]}>
               <Image
-                source={{ uri: transformImage(url)}}
-                style={[
-                  styles.attachmentImage,
-                  isMultiple && styles.smallImage,
-                  isList && styles.listImageView,
-                ]}
+                source={{ uri: transformImage(url, 150) }}
+                style={
+                  isList || moreThanOne
+                    ? styles.attachmentImage
+                    : { ...styles.attachmentImage, width: 180, height: 200 }
+                }
                 resizeMode="cover"
               />
               {isLastVisible && (
                 <View style={styles.extraOverlay}>
-                  <Text style={styles.extraText}>+{extraCount}</Text>
+                  <Text style={styles.extraText}>
+                    +{attachments.length - max}
+                  </Text>
                 </View>
               )}
             </View>
@@ -98,18 +117,19 @@ const AttachmentHandler = ({ attachments, handleImageClick, handleDocumentClick,
       case 'video':
         return (
           <TouchableOpacity key={index} onPress={() => handleVideoClick(url)}>
-            <View style={styles.imageWrapper}>
+            <View style={[styles.imageWrapper, styling]}>
               {loadingThumbnails[index] ? (
                 <ActivityIndicator size="large" color="#0000ff" />
               ) : (
                 <Image
-                  source={{ uri: transformImage(videoThumbnails[index]) || 'fallback-image-url' }}
-                  style={[
-                    styles.attachmentImage,
-                  isMultiple && styles.smallImage,
-                  isList && styles.listImageView,
-
-                  ]}
+                  source={{
+                    uri: transformImage(videoThumbnails[index]) || 'fallback-image-url',
+                  }}
+                  style={
+                    isList || moreThanOne
+                      ? styles.attachmentImage
+                      : { ...styles.attachmentImage, width: 180, height: 200 }
+                  }
                   resizeMode="cover"
                 />
               )}
@@ -120,69 +140,55 @@ const AttachmentHandler = ({ attachments, handleImageClick, handleDocumentClick,
           </TouchableOpacity>
         );
 
-      case 'audio':
-        return (
-          <View key={index} style={styles.audioContainer}>
-            <TouchableOpacity onPress={() => handleDocumentClick(url)}>
-              <Icon name="play-circle-outline" size={isMultiple ? 30 : 50} color="#000" />
-            </TouchableOpacity>
-            <Text>{item.name || 'Audio File'}</Text>
-          </View>
-        );
-
-      case 'document':
-        return (
-          <TouchableOpacity key={index} style={styles.documentContainer} onPress={() => handleDocumentClick(url)}>
-            <Icon name="document-outline" size={isMultiple ? 30 : 40} color="#000" />
-            <Text>{item.name || 'Document'}</Text>
-          </TouchableOpacity>
-        );
-
-      case 'unknown':
-        return (
-          <View key={index} style={styles.documentContainer}>
-            <Icon name="alert-circle-outline" size={40} color="#000" />
-            <Text>Unsupported File</Text>
-          </View>
-        );
-
       default:
         return null;
     }
   };
 
+
+  const groupedAttachments = groupAttachments(
+    attachments.slice(0, max),
+    maxcol,
+  );
+
   return (
     <View>
-      <FlatList
-        data={attachments.slice(0, maxAttachments)}
-        renderItem={renderAttachmentItem}
-        keyExtractor={(item, index) => index.toString()}
-        numColumns={maxcol}  // Set the number of columns to 3 for grid layout
-        columnWrapperStyle={styles.columnWrapper}  // Styling for the row of items
-        contentContainerStyle={styles.grid}
-      />
-
-      {/* Full-screen Video Modal */}
+      {groupedAttachments.map((row, rowIndex) => (
+        <View key={rowIndex} style={styles.row}>
+        {row.map((attachment, colIndex) => {
+          const isLastVisible =
+            rowIndex * maxcol + colIndex === max - 1 &&
+            attachments.length > max;
+          return renderAttachmentItem(
+            attachment,
+            rowIndex * maxcol + colIndex,
+            isLastVisible,
+            groupedAttachments.length > 0
+          );
+        })}
+      </View>
+      ))}
       {fullscreenVideo && (
         <Modal
           animationType="slide"
           transparent={false}
           visible={!!fullscreenVideo}
-          onRequestClose={handleCloseVideo}
-        >
+          onRequestClose={handleCloseVideo}>
           <View style={styles.fullscreenVideoContainer}>
             <Video
-              source={{ uri: fullscreenVideo }}
+              source={{uri: fullscreenVideo}}
               style={styles.fullscreenVideo}
               ref={videoRef}
               controls={true}
               resizeMode="cover"
-              onError={(error) => {
+              onError={error => {
                 console.error('Error loading video', error);
                 handleCloseVideo();
               }}
             />
-            <TouchableOpacity style={styles.closeButton} onPress={handleCloseVideo}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={handleCloseVideo}>
               <Icon name="close-outline" size={30} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -193,28 +199,31 @@ const AttachmentHandler = ({ attachments, handleImageClick, handleDocumentClick,
 };
 
 const styles = StyleSheet.create({
-  grid: {
-    justifyContent: 'center'
-  },
-  columnWrapper: {
-    justifyContent: 'flex-start',
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'start',
   },
   imageWrapper: {
     position: 'relative',
     margin: 2,
   },
   attachmentImage: {
-    width: 180,
-    height: 200,
-    borderRadius: 10,
+    width: 116,
+    height: 120,
+    borderRadius: 5,
+    objectFit: 'cover',
   },
-  smallImage: {
-    width: 90,
-    height: 90,
+  extraOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 5,
   },
-  listImageView:{
-    width: 115,
-    height: 115,
+  extraText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
   },
   playButtonOverlay: {
     position: 'absolute',
@@ -237,42 +246,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 40,
     right: 20,
-  },
-  audioContainer: {
-    alignItems: 'center',
-    backgroundColor: "#f0f0f0",
-    padding: 10,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    marginHorizontal: 5,
-    justifyContent: 'center',
-  },
-  documentContainer: {
-    alignItems: 'center',
-    backgroundColor: "#f0f0f0",
-    padding: 10,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    marginHorizontal: 5,
-    justifyContent: 'center',
-  },
-  extraOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 10,
-  },
-  extraText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
   },
 });
 

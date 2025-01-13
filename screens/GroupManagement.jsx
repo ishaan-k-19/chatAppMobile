@@ -160,7 +160,6 @@ const GroupManagement = ({navigation, route}) => {
       myGroups.refetch();
       groupDetails.refetch();
     } catch (error) {
-      console.log(error?.response?.data?.message)
       Toast.show({
         bottomOffset: 50,
         type: 'error',
